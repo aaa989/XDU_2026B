@@ -11,7 +11,7 @@ app.use(express.static('public'));
 
 // API 配置
 const BASE = 'https://mb44ub9ny4.re.qweatherapi.com';
-const Q_KEY = '44912b526c474bb6baaea74cd1738b8c';
+const Q_KEY = 'xxxxxxxxxxxxxxxxxxxxxxxxx';   // 这里需要自己修改一下，修改成自己的key
 
 //  位置解析函数
 async function resolveLocation(query) {
