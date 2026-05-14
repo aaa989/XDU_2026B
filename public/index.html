@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<!-- 声明这是 HTML5 文档 -->
+<html lang="zh-CN">
+<!-- 页面语言：简体中文 -->
+<head>
+    <!-- 字符编码：UTF-8 支持所有中文和符号 -->
+    <meta charset="UTF-8">
+    <!-- 适配手机屏幕，不让页面缩放错乱 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 浏览器标签页标题 -->
+    <title>环境雾霾探测系统</title>
+
+    <!-- 引入谷歌字体：让界面文字更好看 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- 引入图表库 Chart.js：用来画温度湿度折线图 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- 引入 Tailwind CSS：快速写样式的工具 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Tailwind 配置：自定义颜色和字体 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    // 自定义颜色（薄荷绿、浅绿、桃色、橙色、文字色）
+                    colors: {
+                        'custom-mint': '#61c0bf', 'custom-lmint': '#bbded6', 'custom-peach': '#fae3d9', 
+                        'custom-salmon': '#ffb6b9', 'custom-text': '#2d3748',
+                        'brand-dark': '#2d3748',
+                        'brand-gray': '#718096',
+                        'brand-light': '#fdfcfb',
+                        'brand-border': '#e2e8f0',
+                    },
+                    // 自定义字体
+                    fontFamily: { sans: ['"Noto Sans SC"', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+
+    <!-- 自定义样式：页面美化 -->
+    <style>
+        /* 基础样式：文字颜色、隐藏横向滚动条、背景色 */
+        body { color: #2d3748; overflow-x: hidden; background: #fdfcfb; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        /* 动态渐变背景（彩色模糊光斑） */
+        .ambient-bg { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; overflow: hidden; background: #fdfcfb; }
+        .blob { position: absolute; filter: blur(90px); opacity: 0.6; animation: float 20s infinite alternate ease-in-out; }
+        .blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: #fae3d9; animation-delay: 0s; }
+        .blob-2 { bottom: -20%; right: -10%; width: 60vw; height: 60vw; background: #bbded6; animation-delay: -5s; }
+        .blob-3 { top: 30%; left: 40%; width: 50vw; height: 50vw; background: #ffb6b9; animation-delay: -10s; opacity: 0.45; }
+        
+        /* 光斑缓慢浮动动画 */
+        @keyframes float { 
+            0% { transform: translate(0, 0) scale(1); } 
+            50% { transform: translate(5%, 10%) scale(1.1); } 
+            100% { transform: translate(-5%, 5%) scale(0.9); } 
+        }
+        
+        /* 磨砂玻璃卡片（界面所有白色圆角方块） */
+        .line-card {
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.03), inset 0 0 0 1px rgba(255,255,255,0.4);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* 鼠标悬浮卡片上浮效果 */
+        .line-card:hover {
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(255,255,255,0.8);
+            transform: translateY(-2px);
+        }
+
+        /* 内部小方块的磨砂玻璃 */
+        .inner-glass {
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(10px);
+        }
+
+        /* 渐入动画：页面加载时元素慢慢出现 */
+        .fade-in { animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* 环形AQI进度条 */
+        .gauge-ring { 
+            stroke-dasharray: 283; 
+            stroke-dashoffset: 283; 
+            transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s ease; 
+        }
+        
+        /* 按钮样式 */
+        .btn-outline {
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(10px);
+            transition: all 0.2s;
+        }
+        .btn-outline:hover { background: rgba(255, 255, 255, 0.9); }
+        .btn-outline:active { transform: scale(0.97); }
+
+        /* 搜索框样式 */
+        .search-glass {
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+        }
+        .search-glass:focus {
+            background: rgba(255, 255, 255, 0.9);
+            border-color: #61c0bf;
+            box-shadow: 0 0 0 2px rgba(97, 192, 191, 0.2);
+        }
+    </style>
+</head>
+
+<body class="antialiased min-h-screen flex flex-col items-center py-8 px-4 sm:px-6">
+
+    <!-- 动态彩色光斑背景（底层） -->
+    <div class="ambient-bg">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <!-- 页面总容器：宽度最大1200px -->
+    <div class="w-full max-w-[1200px] flex flex-col gap-6 z-10">
+        
+        <!-- ====================== 顶部标题栏 + 搜索框 ====================== -->
+        <header class="line-card p-4 px-6 flex flex-col lg:flex-row justify-between items-center gap-6 fade-in">
+            <!-- 左侧 Logo + 标题 -->
+            <div class="flex items-center gap-4 w-full lg:w-auto">
+                <div class="p-2.5 rounded-xl inner-glass text-custom-salmon shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                        <circle cx="12" cy="12" r="4"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-wide text-brand-dark">环境雾霾探测系统</h1>
+                    <p class="text-xs text-brand-gray mt-0.5 tracking-wider font-medium" id="sys-time">系统初始化中...</p>
+                </div>
+            </div>
+
+            <!-- 右侧：搜索框 + 定位按钮 -->
+            <div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+                
+                <!-- 搜索城市输入框 -->
+                <div class="relative w-full sm:w-64">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="w-4 h-4 text-brand-gray" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </div>
+                    <input type="text" id="search-input" placeholder="输入城市名称搜索..." class="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl search-glass focus:outline-none transition-all text-brand-dark placeholder-brand-gray shadow-sm">
+                    <button id="search-btn" class="absolute inset-y-1.5 right-1.5 px-3 bg-white/80 border border-white rounded-lg text-xs font-medium text-brand-dark hover:text-custom-mint hover:bg-white transition-colors shadow-sm">
+                        查询
+                    </button>
+                </div>
+
+                <!-- 自动定位按钮 -->
+                <button id="location-btn" class="btn-outline flex items-center gap-2 px-5 py-2.5 w-full sm:w-auto rounded-xl shadow-sm">
+                    <svg class="w-4 h-4 text-custom-mint" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19 12c0-3.87-3.13-7-7-7s-7 3.13-7 7 3.13 7 7 7 7-3.13 7-7z"></path><line x1="12" y1="2" x2="12" y2="5"></line><line x1="12" y1="19" x2="12" y2="22"></line><line x1="2" y1="12" x2="5" y2="12"></line><line x1="19" y1="12" x2="22" y2="12"></line></svg>
+                    <span class="text-sm font-medium" id="location-text">自动定位</span>
+                </button>
+
+            </div>
+        </header>
+
+        <!-- ====================== 主界面内容 ====================== -->
+        <main class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- 左侧：AQI 环形仪表盘（占4列） -->
+            <section class="line-card p-6 lg:col-span-4 flex flex-col fade-in" style="animation-delay: 0.1s;">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xs font-bold text-brand-gray tracking-widest uppercase flex items-center gap-2">
+                        <svg class="w-4 h-4 text-custom-salmon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/></svg>
+                        实时空气质量指数
+                    </h2>
+                    <span class="text-[10px] inner-glass px-2 py-1 rounded-md text-brand-gray font-medium shadow-sm" id="current-city-aqi">未定位</span>
+                </div>
+
+                <!-- AQI 环形图 -->
+                <div class="relative flex flex-col items-center justify-center flex-grow mb-6">
+                    <svg class="w-44 h-44 transform -rotate-90 drop-shadow-sm" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(250, 227, 217, 0.5)" stroke-width="5" stroke-linecap="round" />
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="#ffb6b9" stroke-width="5" stroke-linecap="round" class="gauge-ring" id="aqi-ring" />
+                    </svg>
+                    <div class="absolute flex flex-col items-center justify-center">
+                        <span class="text-5xl font-light text-brand-dark tracking-tighter" id="aqi-value">--</span>
+                        <span class="text-xs font-medium px-3 py-1 rounded-full mt-2 inner-glass text-brand-gray transition-colors duration-300 shadow-sm" id="aqi-level">获取中</span>
+                    </div>
+                </div>
+
+                <!-- 下方三个污染物指标：PM2.5 / PM10 / NO2 -->
+                <div class="grid grid-cols-3 gap-3 w-full">
+                    <div class="flex flex-col items-center justify-center inner-glass rounded-xl py-3 shadow-sm">
+                        <span class="text-[10px] font-medium text-brand-gray mb-1 uppercase">PM 2.5</span>
+                        <span class="text-lg font-bold text-brand-dark" id="pm25-value">--</span>
+                    </div>
+                    <div class="flex flex-col items-center justify-center inner-glass rounded-xl py-3 shadow-sm">
+                        <span class="text-[10px] font-medium text-brand-gray mb-1 uppercase">PM 10</span>
+                        <span class="text-lg font-bold text-brand-dark" id="pm10-value">--</span>
+                    </div>
+                    <div class="flex flex-col items-center justify-center inner-glass rounded-xl py-3 shadow-sm">
+                        <span class="text-[10px] font-medium text-brand-gray mb-1 uppercase">NO2</span>
+                        <span class="text-lg font-bold text-brand-dark" id="no2-value">--</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 右侧：气象数据（占8列） -->
+            <section class="lg:col-span-8 flex flex-col gap-6 fade-in" style="animation-delay: 0.2s;">
+                
+                <!-- 温度 + 天气状况 -->
+                <div class="line-card p-6 flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative">
+                    <div class="flex flex-col items-start z-10 w-full md:w-auto">
+                        <h2 class="text-xs font-bold text-brand-gray tracking-widest uppercase mb-4 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-custom-mint" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h20"/><path d="M12 2v20"/></svg>
+                            当前气象参数
+                        </h2>
+                        <div class="flex items-center gap-6">
+                            <span class="text-6xl font-light text-brand-dark tracking-tighter tabular-nums drop-shadow-sm" id="temp-value">--°</span>
+                            <div class="h-12 w-px bg-white/60"></div>
+                            <div class="flex flex-col">
+                                <span class="text-lg font-medium text-brand-dark" id="weather-main">--</span>
+                                <span class="text-sm text-brand-gray mt-1" id="weather-desc">等待获取数据...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 四个小卡片：湿度 / 风力 / 能见度 / 体感温度 -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 flex-grow">
+                    <div class="line-card inner-glass p-4 flex flex-col justify-between">
+                        <svg class="w-5 h-5 text-custom-mint mb-3 drop-shadow-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+                        <span class="text-[11px] font-medium text-brand-gray uppercase mb-1">空气湿度</span>
+                        <span class="text-xl font-bold text-brand-dark" id="humidity-value">--%</span>
+                    </div>
+                    <div class="line-card inner-glass p-4 flex flex-col justify-between">
+                        <svg class="w-5 h-5 text-custom-mint mb-3 drop-shadow-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.8 19.6A2 2 0 1 0 14 16H2"/><path d="M17.5 8a2.5 2.5 0 1 1 2 4H2"/><path d="M9.8 4.4A2 2 0 1 1 11 8H2"/></svg>
+                        <span class="text-[11px] font-medium text-brand-gray uppercase mb-1">风力级别</span>
+                        <span class="text-xl font-bold text-brand-dark" id="wind-value">--</span>
+                    </div>
+                    <div class="line-card inner-glass p-4 flex flex-col justify-between">
+                        <svg class="w-5 h-5 text-custom-salmon mb-3 drop-shadow-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        <span class="text-[11px] font-medium text-brand-gray uppercase mb-1">能见度(霾)</span>
+                        <span class="text-xl font-bold text-brand-dark" id="vis-value">--</span>
+                    </div>
+                    <div class="line-card inner-glass p-4 flex flex-col justify-between">
+                        <svg class="w-5 h-5 text-custom-salmon mb-3 drop-shadow-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg>
+                        <span class="text-[11px] font-medium text-brand-gray uppercase mb-1">体感温度</span>
+                        <span class="text-xl font-bold text-brand-dark" id="feels-like-value">--°</span>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- 底部：6小时趋势折线图 -->
+            <section class="line-card p-6 lg:col-span-12 fade-in" style="animation-delay: 0.3s;">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+                    <h2 class="text-xs font-bold text-brand-gray tracking-widest uppercase flex items-center gap-2">
+                        <svg class="w-4 h-4 text-brand-gray" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                        未来6小时气象趋势预测
+                    </h2>
+                    <div class="flex gap-4">
+                        <span class="flex items-center gap-2 text-xs text-brand-gray font-medium">
+                            <span class="w-3 h-0.5 bg-custom-salmon drop-shadow-sm"></span> 温度 (°C)
+                        </span>
+                        <span class="flex items-center gap-2 text-xs text-brand-gray font-medium">
+                            <span class="w-3 h-0.5 bg-transparent border-b-2 border-custom-mint border-dashed drop-shadow-sm"></span> 湿度 (%)
+                        </span>
+                    </div>
+                </div>
+                <div class="relative w-full h-[280px]">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ====================== JS 逻辑核心 ====================== -->
+    <script>
+        // 每秒更新一次顶部系统时间
+        setInterval(() => {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+            const timeStr = now.toLocaleTimeString('zh-CN', { hour12: false });
+            document.getElementById('sys-time').innerText = `DATA SYNC • ${dateStr} ${timeStr}`;
+        }, 1000);
+
+        // 图表实例（全局保存，防止重复创建）
+        let myChart = null;
+
+        // 搜索城市：调用后端接口
+        const handleSearch = (city) => {
+            if (!city.trim()) return;
+            updateStatusText("正在检索城市数据...", true);
+            fetchDataFromServer(`?city=${encodeURIComponent(city.trim())}`);
+        };
+
+        // 自动定位：获取经纬度 → 调用后端
+        const handleLocation = () => {
+            updateStatusText("获取高精度坐标...", true);
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude.toFixed(4);
+                        const lon = position.coords.longitude.toFixed(4);
+                        fetchDataFromServer(`?lon=${lon}&lat=${lat}`);
+                    },
+                    (error) => {
+                        // GPS失败 → 降级用IP定位
+                        updateStatusText("GPS受限，尝试IP定位...", true);
+                        fetch('http://ip-api.com/json/?lang=zh-CN')
+                            .then(res => res.json())
+                            .then(data => fetchDataFromServer(`?city=${encodeURIComponent(data.city || data.regionName)}`))
+                            .catch(() => updateStatusText("定位失败，请手动搜索", false));
+                    },
+                    { timeout: 5000, enableHighAccuracy: true }
+                );
+            } else {
+                updateStatusText("设备不支持定位", false);
+            }
+        };
+
+        // 绑定按钮点击事件
+        document.getElementById('location-btn').addEventListener('click', handleLocation);
+        document.getElementById('search-btn').addEventListener('click', () => {
+            handleSearch(document.getElementById('search-input').value);
+        });
+        document.getElementById('search-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleSearch(e.target.value);
+        });
+
+        // 更新按钮提示文字（加载中/成功/失败）
+        function updateStatusText(msg, isLoading) {
+            const locText = document.getElementById('location-text');
+            locText.innerText = msg;
+            if (isLoading) locText.classList.add('animate-pulse');
+            else locText.classList.remove('animate-pulse');
+        }
+
+        // 核心：请求后端 1.js 的天气接口
+        async function fetchDataFromServer(queryStr) {
+            try {
+                const response = await fetch(`/api/weather${queryStr}`);
+                if (!response.ok) throw new Error("Backend API request failed");
+                const result = await response.json();
+
+                if(result.status === 'success') {
+                    // 成功 → 把数据渲染到页面
+                    renderDashboard(result.data);
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                updateStatusText("获取数据失败，请重试", false);
+                console.error("数据请求错误:", error);
+            }
+        }
+
+        // 把后端返回的数据显示到界面上
+        function renderDashboard(data) {
+            updateStatusText("已同步", false);
+            document.getElementById('current-city-aqi').innerText = data.location_name;
+            
+            // 显示 AQI 数值
+            const aqiValue = parseInt(data.aqi) || 0;
+            document.getElementById('aqi-value').innerText = data.aqi;
+            const aqiLevelEl = document.getElementById('aqi-level');
+            aqiLevelEl.innerText = data.aqi_level;
+            
+            // AQI 圆环动画
+            const ring = document.getElementById('aqi-ring');
+            setTimeout(() => { ring.style.strokeDashoffset = 283 - (Math.min(aqiValue, 500) / 500) * 283; }, 100);
+            
+            // 根据 AQI 大小切换颜色
+            let colorHex = "#61c0bf";
+            let bgClass = "bg-custom-mint/10 text-custom-mint border-custom-mint/30";
+            if (aqiValue > 50) { colorHex = "#fbbf24"; bgClass = "bg-amber-500/10 text-amber-500 border-amber-500/30"; }
+            if (aqiValue > 100) { colorHex = "#ffb6b9"; bgClass = "bg-custom-salmon/10 text-custom-salmon border-custom-salmon/30"; }
+            
+            ring.style.stroke = colorHex;
+            aqiLevelEl.className = `text-xs font-medium px-3 py-1 rounded-full mt-2 inner-glass border ${bgClass} transition-colors duration-300 shadow-sm`;
+
+            // 显示污染物：PM2.5 / PM10 / NO2
+            document.getElementById('pm25-value').innerText = data.pm25;
+            document.getElementById('pm10-value').innerText = data.pm10;
+            document.getElementById('no2-value').innerText = data.no2;
+            
+            // 显示气象数据
+            document.getElementById('temp-value').innerText = data.temp + "°";
+            document.getElementById('weather-main').innerText = data.weather_main;
+            document.getElementById('weather-desc').innerText = data.weather_desc;
+            document.getElementById('humidity-value').innerText = data.humidity + "%";
+            document.getElementById('wind-value').innerText = data.wind;
+            document.getElementById('vis-value').innerText = data.vis;
+            document.getElementById('feels-like-value').innerText = data.feels_like + "°";
+
+            // 绘制折线图
+            initAdvancedChart(data.trend);
+        }
+
+        // 绘制温度/湿度趋势图
+        function initAdvancedChart(trendData) {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            if(myChart) myChart.destroy();
+            
+            // 渐变色
+            const gradientSalmon = ctx.createLinearGradient(0, 0, 0, 300);
+            gradientSalmon.addColorStop(0, 'rgba(255, 182, 185, 0.4)');
+            gradientSalmon.addColorStop(1, 'rgba(255, 182, 185, 0.00)');
+
+            // 创建图表
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: trendData.labels,
+                    datasets: [
+                        { 
+                            label: '温度 (°C)', 
+                            data: trendData.temp, 
+                            borderColor: '#ffb6b9', 
+                            backgroundColor: gradientSalmon, 
+                            fill: true, 
+                            borderWidth: 3, 
+                            pointBackgroundColor: '#fff', 
+                            pointBorderColor: '#ffb6b9',
+                            pointBorderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            tension: 0.4, 
+                            yAxisID: 'y' 
+                        },
+                        { 
+                            label: '湿度 (%)', 
+                            data: trendData.humidity, 
+                            borderColor: '#61c0bf', 
+                            borderWidth: 2, 
+                            borderDash: [5, 5], 
+                            pointBackgroundColor: '#fff', 
+                            pointBorderColor: '#61c0bf', 
+                            pointRadius: 3,
+                            tension: 0.4, 
+                            yAxisID: 'y1' 
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.85)',
+                            titleColor: '#2d3748',
+                            bodyColor: '#718096',
+                            borderColor: 'rgba(255, 255, 255, 0.5)',
+                            borderWidth: 1,
+                            padding: 12,
+                            boxPadding: 6,
+                            usePointStyle: true,
+                            backdropFilter: 'blur(10px)'
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            grid: { display: false, drawBorder: false }, 
+                            ticks: { color: '#718096', font: { family: "'Noto Sans SC', sans-serif" } } 
+                        },
+                        y: { 
+                            display: true, 
+                            position: 'left', 
+                            grid: { color: 'rgba(255,255,255,0.4)', drawBorder: false }, 
+                            ticks: { color: '#718096', padding: 10 } 
+                        },
+                        y1: { 
+                            display: true, 
+                            position: 'right', 
+                            grid: { drawOnChartArea: false }, 
+                            ticks: { color: '#718096', padding: 10 } 
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

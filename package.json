@@ -1,0 +1,23 @@
+{
+  "name": "smog-monitor-system",
+  "version": "1.0.0",
+  "description": "环境雾霾探测系统 - 实时监测空气质量",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "weather",
+    "smog",
+    "aqi",
+    "monitor"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.16.0",
+    "cors": "^2.8.6",
+    "express": "^4.22.1"
+  }
+}
